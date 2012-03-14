@@ -1,5 +1,6 @@
-package unused.methods;
+package unused.methods.ui;
 
+import java.util.LinkedList;
 import java.util.List;
 
 import org.eclipse.core.runtime.jobs.IJobChangeEvent;
@@ -13,21 +14,27 @@ import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.ui.IObjectActionDelegate;
 import org.eclipse.ui.IWorkbenchPart;
 
-public class FindAndMarkUnusedMethodsInJavaProject extends Action implements IObjectActionDelegate {
+import unused.methods.core.FindUnusedMethodsInJavaProjects;
+import unused.methods.core.UnusedMethodsMarker;
 
-	private IJavaProject project;
+public class FindAndMarkUnusedMethodsInJavaProjects extends Action implements IObjectActionDelegate {
+
+	private final List<IJavaProject> javaProjects = new LinkedList<IJavaProject>();
 
 	@Override
 	public void run(IAction action) {
-		FindUnusedMethodsInJavaProject findUnusedMethods = new FindUnusedMethodsInJavaProject(project);
+		FindUnusedMethodsInJavaProjects findUnusedMethods = new FindUnusedMethodsInJavaProjects(javaProjects);
 		findUnusedMethods.addJobChangeListener(markUnusedMethodsWhenDone(findUnusedMethods));
 		findUnusedMethods.schedule();
 	}
 
-	private JobChangeAdapter markUnusedMethodsWhenDone(final FindUnusedMethodsInJavaProject findUnusedMethods) {
+	private JobChangeAdapter markUnusedMethodsWhenDone(final FindUnusedMethodsInJavaProjects findUnusedMethods) {
 		return new JobChangeAdapter() {
 			@Override
 			public void done(IJobChangeEvent event) {
+				for (IJavaProject project : javaProjects) {
+					UnusedMethodsMarker.clear(project.getResource());
+				}
 				List<IMethod> unusedMethods = findUnusedMethods.getUnusedMethods();
 				for (IMethod method : unusedMethods) {
 					UnusedMethodsMarker.on(method);
@@ -38,14 +45,16 @@ public class FindAndMarkUnusedMethodsInJavaProject extends Action implements IOb
 
 	@Override
 	public void selectionChanged(IAction action, ISelection selection) {
+		javaProjects.clear();
 		if (selection instanceof IStructuredSelection) {
 			IStructuredSelection strusel = (IStructuredSelection) selection;
-			Object firstElement = strusel.getFirstElement();
-			if (firstElement instanceof IJavaProject) {
-				project = (IJavaProject) firstElement;
+			for (Object element : strusel.toList()) {
+				if (element instanceof IJavaProject) {
+					javaProjects.add((IJavaProject) element);
+				}
 			}
 		}
-		action.setEnabled(project != null);
+		action.setEnabled(!javaProjects.isEmpty());
 	}
 
 	@Override
